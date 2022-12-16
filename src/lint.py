@@ -15,7 +15,8 @@ config = {
         'Data Owner', 'Data Owner Affiliation', 'Data Curator (for the Data Owner)',
         'Project Scientist/Project POC', 'Project Scientist/Project POC Email', 'Key Collaborator(s)',
         'Start Date', 'Project ID', 'Project Title', 'Project Description', 'Data Generating Facility',
-        'Sequencing Platform', 'Is Cell Line?', 'Organism', 'Raw Data Sample Name'],
+        #'Sequencing Platform',
+        'Is Cell Line?', 'Organism', 'Raw Data Sample Name'],
     "data_dictionary": {
         "sheet_name": "Data Dictionary",
         "skip_lines": [0],
@@ -208,7 +209,8 @@ def contains_sheets(spreadsheet,print_sheets=False):
     required = config['.sheets']
     df = pd.read_excel(spreadsheet, sheet_name=None, header=None)
     valid_sheets = [sheet for sheet in df.keys() if sheet in required]
-    #print([sheet for sheet in df.keys()])
+    if print_sheets:
+        print([sheet for sheet in df.keys()])
 
     if sorted(valid_sheets) != sorted(required):
         # Required sheet not in spreadsheet
@@ -355,11 +357,13 @@ def project(config_id, sheet, spreadsheet, log_route):
     return (metadata, sorted(mvds)[-3]) if config_id == 'project_template' else metadata
 
 
-def _parsed_sample(excel_df):
+def _parsed_sample(excel_df, config_id):
     """Private function for 'sample()' to parse the Sample Template sheet.
     This function generates the following parsed values: SampleID, field,
     sample_metadata_value.
     """
+    cstart, cend = config['.warning']
+    estart, eend = config['.error']
     attr_id = -1
     for i, row in excel_df.iterrows():
         project_value_list = [str(field) for field in row]
@@ -369,7 +373,10 @@ def _parsed_sample(excel_df):
             for j in range(len(project_value_list)):
                 if (project_value_list[j].lower() == 'raw data sample name'):
                     attr_id = j
-                    break
+        
+        if (attr_id < 0):
+            print("{}Error:{} Failed to provide required field 'Raw Data Sample Name' on sheet {}...".format(estart, eend, config_id), file=sys.stderr)
+            sys.exit(1)
         attr = project_value_list[attr_id]
         
         # Pass over lines with no attribute or key
@@ -406,7 +413,7 @@ def sample(config_id, sheet, spreadsheet, log_route):
     # Creating logging output file
     outfh = open(os.path.join(log_route, "sample_information.txt"), "w")
 
-    for sid, field, value in _parsed_sample(excel_df = df):
+    for sid, field, value in _parsed_sample(excel_df = df, config_id = config_id):
         outfh.write("{}\t{}\t{}\n".format(sid, field, value))
         if sid not in metadata:
             metadata[sid] = {}
@@ -468,6 +475,10 @@ def main():
     # @validate(): Checks if user inputs are vaild
     metadata, opath, sheets, dryrun = validate(args(sys.argv))
 
+    # Set warnings and error configs
+    cstart, cend = config['.warning']
+    estart, eend = config['.error'] 
+
     # Log file directory and parsed pickled data
     logs = os.path.join(opath, "logs")
     path_exists(logs)
@@ -501,28 +512,30 @@ def main():
     # Get all sample metadata from Sample Template
     sample_dictionary = sample(config_id = "sample_template", sheet = sample_info, spreadsheet = metadata, log_route = logs)
     # Get all project metadata from additional sheets 
+    additionals = ['sample_dbGaP', 'sample_CDS', 'sample_GEO', 'sample_GDC']
     sample_additionals = [sample(config_id = add, sheet = config[add]['sheet_name'], spreadsheet = metadata, log_route = logs) for add in additionals]
     # Merge additional metadata into sample_dictionary
     for add in sample_additionals:
         for sample_id in add.keys():
+            if (sample_id not in sample_dictionary.keys()):
+                print("{}Error:{} Attempt to include additional metadata on inexistent Sample ID {}, please verify... exiting".format(estart, eend, sample_id), file=sys.stderr)
+                sys.exit(1)
             sample_dictionary = merge_metadata(sample_dictionary,add,sample_id)
-
-    # Check if user has provided all required check_fields extracted from dictionary sheet
-    missing = missing_fields(parsed_dict=project_dictionary, data_dict=meta_dictionary, collection_type="Project", requirements=req_fields, Nsubprojects=subprojects)
-    missing = missing_fields(parsed_dict=sample_dictionary, data_dict=meta_dictionary, collection_type="Sample", requirements=missing, ext=['Sample ID'])
-
-    if missing:
-        estart, eend = config['.warning']
-        print("{}Warning:{} Failed to provide field(s) {}...exiting".format(estart, eend, missing), file=sys.stderr)
     
     # Check if user has provided all the minimum requirements
     missing = missing_fields(parsed_dict=project_dictionary, data_dict=meta_dictionary, collection_type="Project", requirements=config['.min_required'], Nsubprojects=subprojects)
     missing = missing_fields(parsed_dict=sample_dictionary, data_dict=meta_dictionary, collection_type="Sample", requirements=missing, ext=['Sample ID'])
 
     if missing:
-        estart, eend = config['.error']
-        print("{}Error:{} Failed to provide required field(s) {}...exiting".format(estart, eend, missing), file=sys.stderr)
+        print("{}Error:{} Failed to provide required field(s) {}... exiting".format(estart, eend, missing), file=sys.stderr)
         sys.exit(1)
+    
+    # Check if user has provided all required check_fields extracted from dictionary sheet
+    missing = missing_fields(parsed_dict=project_dictionary, data_dict=meta_dictionary, collection_type="Project", requirements=req_fields, Nsubprojects=subprojects)
+    missing = missing_fields(parsed_dict=sample_dictionary, data_dict=meta_dictionary, collection_type="Sample", requirements=missing, ext=['Sample ID'])
+
+    if missing:
+        print("{}WARNING:{} Failed to provide field(s) {}...".format(cstart, cend, missing), file=sys.stderr)
 
     # Save parsed data as JSON file
     with open(os.path.join(opath, "data_dictionary.json"), 'w') as file:
