@@ -12,11 +12,10 @@ config = {
                 'Recommended Fields for CDS', 'Recommended Fields for GEO', 'Recommended Fields for GDC',
                 'Data Dictionary', 'Disease, Diagnoses, Antibodies'],
     ".min_required": [
-        'Data Owner', 'Data Owner Affiliation', 'Data Curator (for the Data Owner)',
-        'Project Scientist/Project POC', 'Project Scientist/Project POC Email', 'Key Collaborator(s)',
-        'Start Date', 'Project ID', 'Project Title', 'Project Description', 'Data Generating Facility',
-        #'Sequencing Platform',
-        'Is Cell Line?', 'Organism', 'Raw Data Sample Name'],
+        'Data Owner', 'Data Owner Affiliation', 'Data Generator (for the Data Owner)',
+        'Project Title', 'Project Description', 'Data Generating Facility', 'Method', 'Start Date', 'Access', 'Summary of Samples',
+        'Raw Data Sample Name', 'Sample Name', 'Sequencing Platform', 'Analyte Type', 'Organism'],
+    ".project_to_sample": ['Sequencing Platform', 'Organism'],
     "data_dictionary": {
         "sheet_name": "Data Dictionary",
         "skip_lines": [0],
@@ -34,7 +33,7 @@ config = {
         "sheet_name": "Required Fields - User Form",
         "test_sheet": "Required Fields - User Form",
         "skip_lines": [0],
-        "nrows": 14,
+        "nrows": 17,
         "nrows_PI_Lab": 3,
         "singularities": [
                             'PI Name', 'PI Affiliation', 'Project Title',
@@ -55,7 +54,7 @@ config = {
     "sample_template": {
         "sheet_name": "Required Fields - User Form",
         "test_sheet": "Required Fields - User Form",
-        "skip_lines": 17
+        "skip_lines": 20
     },
     "project_dbGaP": {
         "sheet_name": "Recommended Fields for dbGaP",
@@ -425,6 +424,18 @@ def sample(config_id, sheet, spreadsheet, log_route):
     return metadata
 
 
+def project_to_sample_metadata(project, sample):
+    """Add to Sample metadata some general information from the Project level,
+    defined in config.project_to_sample
+    """
+    print(project)
+    for field in config['.project_to_sample']:
+        print(project[field])
+        for sid in sample.keys():
+            sample[sid][field] = project[field]
+            print(field,sid,sample[sid][field])
+    return sample
+
 def missing_fields(parsed_dict, data_dict, collection_type, requirements, Nsubprojects = None, ext = []):
     """Checks the parsed fields in the user-provided spreadsheet against the
     data dictionary to see if all the required fields were provided.
@@ -463,9 +474,15 @@ def missing_fields(parsed_dict, data_dict, collection_type, requirements, Nsubpr
     return missing
 
 
-def merge_metadata(meta1, meta2, key='Project'):
+def merge_metadata(meta1, meta2, key='Project', update_if_exists=True):
+    """Merge metadata from different dictionaries. Adds the information
+    of dictionary 2 into dictionary 1 and returns the merged dictionary.
+    To update keys that already existis in dictionary 1 let the
+    update_if_exists to be True, or False otherwise.
+    """
     for i in meta2[key].keys():
-        meta1[key][i] = meta2[key][i]
+        if update_if_exists or i not in meta1[key].keys():
+            meta1[key][i] = meta2[key][i]
     return meta1
 
 
@@ -521,7 +538,8 @@ def main():
                 print("{}Error:{} Attempt to include additional metadata on inexistent Sample ID {}, please verify... exiting".format(estart, eend, sample_id), file=sys.stderr)
                 sys.exit(1)
             sample_dictionary = merge_metadata(sample_dictionary,add,sample_id)
-    
+    sample_dictionary = project_to_sample_metadata(project_dictionary['Project'],sample_dictionary)
+            
     # Check if user has provided all the minimum requirements
     missing = missing_fields(parsed_dict=project_dictionary, data_dict=meta_dictionary, collection_type="Project", requirements=config['.min_required'], Nsubprojects=subprojects)
     missing = missing_fields(parsed_dict=sample_dictionary, data_dict=meta_dictionary, collection_type="Sample", requirements=missing, ext=['Sample ID'])
