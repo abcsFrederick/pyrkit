@@ -12,11 +12,13 @@ config = {
                 'Recommended Fields for CDS', 'Recommended Fields for GEO', 'Recommended Fields for GDC',
                 'Data Dictionary', 'Disease, Diagnoses, Antibodies'],
     ".min_required": [
-        'Data Owner', 'Data Owner Affiliation', 'Data Curator (for the Data Owner)',
-        'Project Scientist/Project POC', 'Project Scientist/Project POC Email', 'Key Collaborator(s)',
-        'Start Date', 'Project ID', 'Project Title', 'Project Description', 'Data Generating Facility',
-        #'Sequencing Platform',
-        'Is Cell Line?', 'Organism', 'Raw Data Sample Name'],
+        'Data Owner', 'Data Owner Affiliation', 'Data Generator (for the Data Owner)', #Pi_Lab level
+        'Project Title', 'Project Description', 'Data Generating Facility', 'Library Strategy', 'Start Date', 'Access', 'Summary of Samples', #Project level
+        'Raw Data Sample Name', 'Sample Name', 'Sequencing Platform', 'Analyte Type', 'Organism'], #Sample level
+    ".project_to_sample": ['Sequencing Platform', 'Organism'],
+    ".sample_to_project": ['Library Strategy'],
+    ".add_project_field": {'Access': 'Closed Access'},
+    ".sample_summary_fields": ['Disease','Library Strategy','Analyte Type','Tissue','Tissue Type','Age','Gender','Race'],
     "data_dictionary": {
         "sheet_name": "Data Dictionary",
         "skip_lines": [0],
@@ -425,6 +427,75 @@ def sample(config_id, sheet, spreadsheet, log_route):
     return metadata
 
 
+def project_to_sample_metadata(project, sample):
+    """Add to Sample metadata some general information from the Project level,
+    defined in config.project_to_sample
+    """
+    for field in config['.project_to_sample']:
+        for sid in sample.keys():
+            sample[sid][field] = project[field][0]
+    return sample
+
+
+def count_sample_field(sample, field):
+    """Return the number of times each value in a given field has been filled.
+    """
+    counter = {}
+    for sid in sample.keys():
+        if field in counter.keys():
+            counter[field] += 1
+        else:
+            counter[field] = 1
+    return counter
+
+def get_max_counter_field(counter):
+    """Return the value of the fild that has been filled the most.
+    """
+    max_count = ''
+    n_counts = -1
+    for fid in counter.keys():
+        if counter[fid] > n_counts:
+            max_count = fid
+    return max_count
+
+def sample_to_project_metadata(sample, project):
+    """Add to Project metadata some summarized information from the Project level,
+    defined in config.sample_to_project
+    """
+    for field in config['.sample_to_project']:
+        counter = count_sample_field(sample,field)
+        project[field] = [get_max_counter_field(counter)]
+        
+    return project
+
+
+def create_summary_of_samples(sample):
+    """Returns the summary of the samples,
+    based in config.sample_summary_fields
+    """
+    summary = f"This project contains {len(sample)} samples."
+    for field in config['.sample_summary_fields']:
+        summary += f" In the {field} field,"
+        counter = count_sample_field(sample,field)
+        for value in counter.keys():
+            summary += f" {counter[value]} samples had {value},"
+        summary = summary[:-1]
+        summary += '.'
+
+    return summary
+
+def add_default_project_metadata(project, sample):
+    """Add to Project metadata some default metadata,
+    defined in config.add_project_field
+    """
+    project = sample_to_project_metadata(sample,project)
+    for field in config['.add_project_field'].keys():
+        project[field] = [config['.add_project_field'][field]]
+    project['Summary of Samples'] = [create_summary_of_samples(sample)]
+    #project['Number of Samples'] = [len(sample)]
+    return project
+    
+
 def missing_fields(parsed_dict, data_dict, collection_type, requirements, Nsubprojects = None, ext = []):
     """Checks the parsed fields in the user-provided spreadsheet against the
     data dictionary to see if all the required fields were provided.
@@ -443,17 +514,18 @@ def missing_fields(parsed_dict, data_dict, collection_type, requirements, Nsubpr
             except KeyError:
                 print("{}WARNING:{} Provided fields ({}, {}) are not defined in data dictionary... skipping over now!".format(cstart, cend, k, field), file=sys.stderr)
                 continue
-
-            if is_req.lower() == 'required':
+            
+            if is_req.lower() == 'required' or field in requirements:
                 mvd_fields = [v for v in uvalue if v.strip() and v.lower() != 'nan']
 
                 # Check for any missing required sub-project fields
-                if field in mvd_attr and len(mvd_fields) != Nsubprojects:
-                    print("{}Error:{} Failed to provide required field ({}) for all sub-projects...exiting".format(estart, eend, field), file=sys.stderr)
-                    sys.exit(1)
+                #if field in mvd_attr and len(mvd_fields) != Nsubprojects:
+                #    print("{}Error:{} Failed to provide required field ({}) for all sub-projects...exiting".format(estart, eend, field), file=sys.stderr)
+                #    sys.exit(1)
 
                 # Check for singular required fields (no MVD relationship)
-                elif field not in mvd_attr and not mvd_fields:
+                #elif
+                if field not in mvd_attr and not mvd_fields:
                     print("{}Error:{} Failed to provide required field ({})...exiting".format(estart, eend, field), file=sys.stderr)
                     sys.exit(1)
                 provided.append(field)
@@ -463,9 +535,15 @@ def missing_fields(parsed_dict, data_dict, collection_type, requirements, Nsubpr
     return missing
 
 
-def merge_metadata(meta1, meta2, key='Project'):
+def merge_metadata(meta1, meta2, key='Project', update_if_exists=True):
+    """Merge metadata from different dictionaries. Adds the information
+    of dictionary 2 into dictionary 1 and returns the merged dictionary.
+    To update keys that already existis in dictionary 1 let the
+    update_if_exists to be True, or False otherwise.
+    """
     for i in meta2[key].keys():
-        meta1[key][i] = meta2[key][i]
+        if update_if_exists or i not in meta1[key].keys():
+            meta1[key][i] = meta2[key][i]
     return meta1
 
 
@@ -521,7 +599,9 @@ def main():
                 print("{}Error:{} Attempt to include additional metadata on inexistent Sample ID {}, please verify... exiting".format(estart, eend, sample_id), file=sys.stderr)
                 sys.exit(1)
             sample_dictionary = merge_metadata(sample_dictionary,add,sample_id)
-    
+    sample_dictionary = project_to_sample_metadata(project_dictionary['Project'],sample_dictionary)
+    project_dictionary['Project'] = add_default_project_metadata(project_dictionary['Project'], sample_dictionary)
+            
     # Check if user has provided all the minimum requirements
     missing = missing_fields(parsed_dict=project_dictionary, data_dict=meta_dictionary, collection_type="Project", requirements=config['.min_required'], Nsubprojects=subprojects)
     missing = missing_fields(parsed_dict=sample_dictionary, data_dict=meta_dictionary, collection_type="Sample", requirements=missing, ext=['Sample ID'])
