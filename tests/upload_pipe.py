@@ -199,8 +199,8 @@ def main():
             _create_parser(multiQC_path,output_path)
             exit_code(os.system(f"python src/pyparser.py {multiQC_path}/*.txt"))
             file = "multiqc_matrix.tsv"
-            file_test = "tmultiqc_matrix.tsv"
-            exit_code(os.system(f"python src/initialize.py {output_path} {output_path}/meta {vault} --convert -m {file_test}"))
+            #file = "tmultiqc_matrix.tsv"
+            exit_code(os.system(f"python src/initialize.py {output_path} {output_path}/meta {vault} --convert -m {file}"))
         else:
             exit_code(os.system(f"python src/initialize.py {output_path} {output_path}/meta {vault} --convert"))
 
