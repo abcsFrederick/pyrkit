@@ -8,17 +8,7 @@ import sys, os, re, json
 # Configuration for defining valid sheets and other default values
 config = {
     ".warning": ["\033[93m", "\033[00m"], ".error": ["\033[91m", "\033[00m"],
-    ".sheets": ['Derived Fields', 'Required Fields - User Form', 'Recommended Fields for dbGaP',
-                'Recommended Fields for CDS', 'Recommended Fields for GEO', 'Recommended Fields for GDC',
-                'Data Dictionary', 'Disease, Diagnoses, Antibodies'],
-    ".min_required": [
-        'Data Owner', 'Data Owner Affiliation', 'Data Generator (for the Data Owner)', #Pi_Lab level
-        'Project Title', 'Project Description', 'Data Generating Facility', 'Library Strategy', 'Start Date', 'Access', 'Summary of Samples', #Project level
-        'Raw Data Sample Name', 'Sample Name', 'Sequencing Platform', 'Analyte Type', 'Organism'], #Sample level
-    ".project_to_sample": ['Sequencing Platform', 'Organism'],
-    ".sample_to_project": ['Library Strategy'],
-    ".add_project_field": {'Access': 'Closed Access'},
-    ".sample_summary_fields": ['Disease','Library Strategy','Analyte Type','Tissue','Tissue Type','Age','Gender','Race'],
+    ".sheets": ["Data Dictionary", "Project Template", "Sample Template"],
     "data_dictionary": {
         "sheet_name": "Data Dictionary",
         "skip_lines": [0],
@@ -33,11 +23,9 @@ config = {
         }
     },
     "project_template": {
-        "sheet_name": "Required Fields - User Form",
-        "test_sheet": "Required Fields - User Form",
-        "skip_lines": [0],
-        "nrows": 14,
-        "nrows_PI_Lab": 3,
+        "sheet_name": "Project Template",
+        "test_sheet": "Example Project",
+        "skip_lines": [0,1],
         "singularities": [
                             'PI Name', 'PI Affiliation', 'Project Title',
                             'Project Description', 'Start Date',
@@ -55,57 +43,9 @@ config = {
                 ]
     },
     "sample_template": {
-        "sheet_name": "Required Fields - User Form",
-        "test_sheet": "Required Fields - User Form",
-        "skip_lines": 17
-    },
-    "project_dbGaP": {
-        "sheet_name": "Recommended Fields for dbGaP",
-        "test_sheet": "Recommended Fields for dbGaP",
-        "skip_lines": 3,
-        "nrows": 6,
-        "nrows_PI_Lab": 0
-    },
-    "sample_dbGaP": {
-        "sheet_name": "Recommended Fields for dbGaP",
-        "test_sheet": "Recommended Fields for dbGaP",
-        "skip_lines": 11
-    },
-    "project_CDS": {
-        "sheet_name": "Recommended Fields for CDS",
-        "test_sheet": "Recommended Fields for CDS",
-        "skip_lines": 3,
-        "nrows": 1,
-        "nrows_PI_Lab": 0
-    },
-    "sample_CDS": {
-        "sheet_name": "Recommended Fields for CDS",
-        "test_sheet": "Recommended Fields for CDS",
-        "skip_lines": 6
-    },
-    "project_GEO": {
-        "sheet_name": "Recommended Fields for GEO",
-        "test_sheet": "Recommended Fields for GEO",
-        "skip_lines": 3,
-        "nrows": 6,
-        "nrows_PI_Lab": 0
-    },
-    "sample_GEO": {
-        "sheet_name": "Recommended Fields for GEO",
-        "test_sheet": "Recommended Fields for GEO",
-        "skip_lines": 11,
-    },
-    "project_GDC": {
-        "sheet_name": "Recommended Fields for GDC",
-        "test_sheet": "Recommended Fields for GDC",
-        "skip_lines": 3,
-        "nrows": 7,
-        "nrows_PI_Lab": 0
-    },
-    "sample_GDC": {
-        "sheet_name": "Recommended Fields for GDC",
-        "test_sheet": "Recommended Fields for GDC",
-        "skip_lines": 12,
+        "sheet_name": "Sample Template",
+        "test_sheet": "Example Sample",
+        "skip_lines": [0,1],
     }
 }
 
@@ -156,7 +96,7 @@ def args(argslist, dryrun = False):
 
     # Check for dry-run boolean flag
     elif '-n' in user_args or '--dry-run' in user_args:
-        print(f"Dry-running with included example sheets: {config['project_template']['test_sheet']}, {config['sample_template']['test_sheet']}")
+        print('Dry-running with included example sheets: "Example Project", "Example Sample"')
         user_args = [arg for arg in user_args if arg not in ['-n', '--dry-run']]
         dryrun = True
 
@@ -202,7 +142,7 @@ def file_exists(filename):
     return
 
 
-def contains_sheets(spreadsheet,print_sheets=False):
+def contains_sheets(spreadsheet):
     """Checks to see if user-provided spreadsheet contains all the required sheets
     that are defined in the config specification. Please see config['.sheets']
     for all required sheets.
@@ -211,8 +151,6 @@ def contains_sheets(spreadsheet,print_sheets=False):
     required = config['.sheets']
     df = pd.read_excel(spreadsheet, sheet_name=None, header=None)
     valid_sheets = [sheet for sheet in df.keys() if sheet in required]
-    if print_sheets:
-        print([sheet for sheet in df.keys()])
 
     if sorted(valid_sheets) != sorted(required):
         # Required sheet not in spreadsheet
@@ -306,21 +244,22 @@ def _remove_trailing_nan(linelist):
     return clean
 
 
-def _parsed_project(excel_df, config_id):
+def _parsed_project(excel_df):
     """Private function for 'project()' to parse the Project Template sheet.
     This function generates the following parsed values: collection_type, field,
     project_value_list.
     """
-    nrows_collection_PI_Lab = config[config_id]["nrows_PI_Lab"]
     for i, row in excel_df.iterrows():
         # Project information follows a key, value_list pattern
         attr, *project_value_list = [str(field).lstrip().rstrip() for field in row]
         # Pass over lines with no attribute or key
         if not attr or attr == 'nan' or attr.lower().startswith('optional field'):
             continue
-        # Get collection type: PI, Project
-        collection_type = 'PI_Lab' if i < nrows_collection_PI_Lab else 'Project'
-        
+        # Get collection type: PI, Project, Sample
+        elif "collection" in attr.lower():
+            collection_type = project_value_list[0]
+            continue
+
         # Remove trailing empty cells or nan's
         project_value_list = _remove_trailing_nan(project_value_list)
 
@@ -328,25 +267,23 @@ def _parsed_project(excel_df, config_id):
 
 
 
-def project(config_id, sheet, spreadsheet, log_route):
+def project(sheet, spreadsheet, log_route):
     """Parses the 'Project Template' sheet in the project_request_spreadsheet
     to extract PI-level and Project-level metadata. Returns a nested dictionary where
     [key1] = collection_type (PI, Project), [key2] = field, and the value is a list
     of values where each value is metadata for a sub-project [Proj-1_attr, Proj-2_attr, ...].
     A log file gets created in '{user-defined-outpath}/logs/project_information.txt'.
     """
-    skipover = config[config_id]["skip_lines"]
-    nrows = config[config_id]["nrows"]
+    skipover = config["project_template"]["skip_lines"]
     metadata = {}
 
     # Skip over reading the first line or header
-    df = pd.read_excel(spreadsheet, sheet_name=sheet, header=None, usecols=[0,1], skiprows=skipover, nrows=nrows)
-
+    df = pd.read_excel(spreadsheet, sheet_name=sheet, header=None, skiprows=skipover)
     # Creating logging output file
     outfh = open(os.path.join(log_route, "project_information.txt"), "w")
 
     mvds = [] # Find the number of sub-projects or the number of MVDs an attribute can have
-    for col, field, pro_attr_list in _parsed_project(excel_df = df,config_id = config_id):
+    for col, field, pro_attr_list in _parsed_project(excel_df = df):
         outfh.write("{}\t{}\t{}\n".format(col, field, "\t".join(pro_attr_list)))
         if col not in metadata:
             metadata[col] = {}
@@ -355,42 +292,26 @@ def project(config_id, sheet, spreadsheet, log_route):
         mvds.append(len(pro_attr_list))
 
     outfh.close()
-    
-    return (metadata, sorted(mvds)[-3]) if config_id == 'project_template' else metadata
+
+    return metadata, sorted(mvds)[-3]
 
 
-def _parsed_sample(excel_df, config_id):
+def _parsed_sample(excel_df):
     """Private function for 'sample()' to parse the Sample Template sheet.
     This function generates the following parsed values: SampleID, field,
     sample_metadata_value.
     """
-    cstart, cend = config['.warning']
-    estart, eend = config['.error']
-    attr_id = -1
     for i, row in excel_df.iterrows():
-        project_value_list = [str(field) for field in row]
-        
-        #Find equivalent of the sample id
-        if attr_id < 0:
-            for j in range(len(project_value_list)):
-                if (project_value_list[j].lower() == 'raw data sample name'):
-                    attr_id = j
-        
-        if (attr_id < 0):
-            print("{}Error:{} Failed to provide required field 'Raw Data Sample Name' on sheet {}...".format(estart, eend, config_id), file=sys.stderr)
-            sys.exit(1)
-        attr = project_value_list[attr_id]
-        
+        attr, *project_value_list = [str(field).lstrip().rstrip() for field in row]
         # Pass over lines with no attribute or key
         if not attr or attr == 'nan' or attr.lower().startswith('optional field'):
             continue
-            
         # Check if header and clean
-        if str(attr).lower() == 'raw data sample name':
+        if attr.lower() == 'sample id':
             header = _remove_trailing_nan(project_value_list)
             sid_field = attr
             continue
-        
+
         for j in range(0,len(header),1):
             yield attr, header[j], project_value_list[j]
         else:
@@ -398,24 +319,21 @@ def _parsed_sample(excel_df, config_id):
             yield attr, sid_field, attr
 
 
-def sample(config_id, sheet, spreadsheet, log_route):
+def sample(sheet, spreadsheet, log_route):
     """Parses the 'Sample Template' sheet in the project_request_spreadsheet
     to extract Sample-level metadata. Returns a nested dictionary where
     [key1] = SampleID, [key2] = field, and value = user-provided info.
     A log file gets created in '{user-defined-outpath}/logs/sample_information.txt'.
     """
-    skipover = config[config_id]["skip_lines"]
+    skipover = config["sample_template"]["skip_lines"]
     metadata = {}
 
     # Skip over reading the first line or header
     df = pd.read_excel(spreadsheet, sheet_name=sheet, header=None, skiprows=skipover)
-    if (config_id == 'sample_template'):
-        df.drop([1,2],inplace=True)
-    
     # Creating logging output file
     outfh = open(os.path.join(log_route, "sample_information.txt"), "w")
 
-    for sid, field, value in _parsed_sample(excel_df = df, config_id = config_id):
+    for sid, field, value in _parsed_sample(excel_df = df):
         outfh.write("{}\t{}\t{}\n".format(sid, field, value))
         if sid not in metadata:
             metadata[sid] = {}
@@ -426,75 +344,6 @@ def sample(config_id, sheet, spreadsheet, log_route):
 
     return metadata
 
-
-def project_to_sample_metadata(project, sample):
-    """Add to Sample metadata some general information from the Project level,
-    defined in config.project_to_sample
-    """
-    for field in config['.project_to_sample']:
-        for sid in sample.keys():
-            sample[sid][field] = project[field][0]
-    return sample
-
-
-def count_sample_field(sample, field):
-    """Return the number of times each value in a given field has been filled.
-    """
-    counter = {}
-    for sid in sample.keys():
-        if field in counter.keys():
-            counter[field] += 1
-        else:
-            counter[field] = 1
-    return counter
-
-def get_max_counter_field(counter):
-    """Return the value of the fild that has been filled the most.
-    """
-    max_count = ''
-    n_counts = -1
-    for fid in counter.keys():
-        if counter[fid] > n_counts:
-            max_count = fid
-    return max_count
-
-def sample_to_project_metadata(sample, project):
-    """Add to Project metadata some summarized information from the Project level,
-    defined in config.sample_to_project
-    """
-    for field in config['.sample_to_project']:
-        counter = count_sample_field(sample,field)
-        project[field] = [get_max_counter_field(counter)]
-        
-    return project
-
-
-def create_summary_of_samples(sample):
-    """Returns the summary of the samples,
-    based in config.sample_summary_fields
-    """
-    summary = f"This project contains {len(sample)} samples."
-    for field in config['.sample_summary_fields']:
-        summary += f" In the {field} field,"
-        counter = count_sample_field(sample,field)
-        for value in counter.keys():
-            summary += f" {counter[value]} samples had {value},"
-        summary = summary[:-1]
-        summary += '.'
-
-    return summary
-
-def add_default_project_metadata(project, sample):
-    """Add to Project metadata some default metadata,
-    defined in config.add_project_field
-    """
-    project = sample_to_project_metadata(sample,project)
-    for field in config['.add_project_field'].keys():
-        project[field] = [config['.add_project_field'][field]]
-    project['Summary of Samples'] = [create_summary_of_samples(sample)]
-    #project['Number of Samples'] = [len(sample)]
-    return project
-    
 
 def missing_fields(parsed_dict, data_dict, collection_type, requirements, Nsubprojects = None, ext = []):
     """Checks the parsed fields in the user-provided spreadsheet against the
@@ -514,18 +363,17 @@ def missing_fields(parsed_dict, data_dict, collection_type, requirements, Nsubpr
             except KeyError:
                 print("{}WARNING:{} Provided fields ({}, {}) are not defined in data dictionary... skipping over now!".format(cstart, cend, k, field), file=sys.stderr)
                 continue
-            
-            if is_req.lower() == 'required' or field in requirements:
+
+            if is_req.lower() == 'required':
                 mvd_fields = [v for v in uvalue if v.strip() and v.lower() != 'nan']
 
                 # Check for any missing required sub-project fields
-                #if field in mvd_attr and len(mvd_fields) != Nsubprojects:
-                #    print("{}Error:{} Failed to provide required field ({}) for all sub-projects...exiting".format(estart, eend, field), file=sys.stderr)
-                #    sys.exit(1)
+                if field in mvd_attr and len(mvd_fields) != Nsubprojects:
+                    print("{}Error:{} Failed to provide required field ({}) for all sub-projects...exiting".format(estart, eend, field), file=sys.stderr)
+                    sys.exit(1)
 
                 # Check for singular required fields (no MVD relationship)
-                #elif
-                if field not in mvd_attr and not mvd_fields:
+                elif field not in mvd_attr and not mvd_fields:
                     print("{}Error:{} Failed to provide required field ({})...exiting".format(estart, eend, field), file=sys.stderr)
                     sys.exit(1)
                 provided.append(field)
@@ -535,27 +383,11 @@ def missing_fields(parsed_dict, data_dict, collection_type, requirements, Nsubpr
     return missing
 
 
-def merge_metadata(meta1, meta2, key='Project', update_if_exists=True):
-    """Merge metadata from different dictionaries. Adds the information
-    of dictionary 2 into dictionary 1 and returns the merged dictionary.
-    To update keys that already existis in dictionary 1 let the
-    update_if_exists to be True, or False otherwise.
-    """
-    for i in meta2[key].keys():
-        if update_if_exists or i not in meta1[key].keys():
-            meta1[key][i] = meta2[key][i]
-    return meta1
-
-
 def main():
 
     # @args(): Parses positional command-line args
     # @validate(): Checks if user inputs are vaild
     metadata, opath, sheets, dryrun = validate(args(sys.argv))
-
-    # Set warnings and error configs
-    cstart, cend = config['.warning']
-    estart, eend = config['.error'] 
 
     # Log file directory and parsed pickled data
     logs = os.path.join(opath, "logs")
@@ -577,45 +409,21 @@ def main():
     # Get specification for parsing 'Project Template'
     project_info = config["project_template"][this_template]
     # Get all project metadata from Project Template
-    project_dictionary, subprojects = project(config_id = 'project_template', sheet = project_info, spreadsheet = metadata, log_route = logs)
-    # Get all project metadata from additional sheets 
-    additionals = ['project_dbGaP', 'project_CDS', 'project_GEO', 'project_GDC']
-    project_additionals = [project(config_id = add, sheet = config[add]['sheet_name'], spreadsheet = metadata, log_route = logs) for add in additionals]
-    # Merge additional metadata into project_dictionary
-    for add in project_additionals:
-        project_dictionary = merge_metadata(project_dictionary,add,'Project')
+    project_dictionary, subprojects = project(sheet = project_info, spreadsheet = metadata, log_route = logs)
 
     # Get specification for parsing 'Sample Template'
     sample_info = config["sample_template"][this_template]
     # Get all sample metadata from Sample Template
-    sample_dictionary = sample(config_id = "sample_template", sheet = sample_info, spreadsheet = metadata, log_route = logs)
-    # Get all project metadata from additional sheets 
-    additionals = ['sample_dbGaP', 'sample_CDS', 'sample_GEO', 'sample_GDC']
-    sample_additionals = [sample(config_id = add, sheet = config[add]['sheet_name'], spreadsheet = metadata, log_route = logs) for add in additionals]
-    # Merge additional metadata into sample_dictionary
-    for add in sample_additionals:
-        for sample_id in add.keys():
-            if (sample_id not in sample_dictionary.keys()):
-                print("{}Error:{} Attempt to include additional metadata on inexistent Sample ID {}, please verify... exiting".format(estart, eend, sample_id), file=sys.stderr)
-                sys.exit(1)
-            sample_dictionary = merge_metadata(sample_dictionary,add,sample_id)
-    sample_dictionary = project_to_sample_metadata(project_dictionary['Project'],sample_dictionary)
-    project_dictionary['Project'] = add_default_project_metadata(project_dictionary['Project'], sample_dictionary)
-            
-    # Check if user has provided all the minimum requirements
-    missing = missing_fields(parsed_dict=project_dictionary, data_dict=meta_dictionary, collection_type="Project", requirements=config['.min_required'], Nsubprojects=subprojects)
-    missing = missing_fields(parsed_dict=sample_dictionary, data_dict=meta_dictionary, collection_type="Sample", requirements=missing, ext=['Sample ID'])
+    sample_dictionary = sample(sheet = sample_info, spreadsheet = metadata, log_route = logs)
 
-    if missing:
-        print("{}Error:{} Failed to provide required field(s) {}... exiting".format(estart, eend, missing), file=sys.stderr)
-        sys.exit(1)
-    
-    # Check if user has provided all required check_fields extracted from dictionary sheet
+    # Check if user has provided all required check_fields
     missing = missing_fields(parsed_dict=project_dictionary, data_dict=meta_dictionary, collection_type="Project", requirements=req_fields, Nsubprojects=subprojects)
     missing = missing_fields(parsed_dict=sample_dictionary, data_dict=meta_dictionary, collection_type="Sample", requirements=missing, ext=['Sample ID'])
 
     if missing:
-        print("{}WARNING:{} Failed to provide field(s) {}...".format(cstart, cend, missing), file=sys.stderr)
+        estart, eend = config['.error']
+        print("{}Error:{} Failed to provide required field(s) {}...exiting".format(estart, eend, missing), file=sys.stderr)
+        sys.exit(1)
 
     # Save parsed data as JSON file
     with open(os.path.join(opath, "data_dictionary.json"), 'w') as file:

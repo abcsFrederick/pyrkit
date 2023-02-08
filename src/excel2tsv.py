@@ -22,18 +22,10 @@ Requirements:
 
 def write(inputfile, outprefix):
         '''Takes input XLSX filename and output file prefix to create multiple TSV files for each worksheet in the XSLX file.'''
-        
-        try:
-                sheet2df = pd.read_excel(inputfile, sheet_name=None, header=None)
-        except Exception as error:
-                # Sometimes there is an error in opening excel files using openpyxl for bad formatting in the files, such
-                # as different font styles and sizes. Saving the file again in the old xls format may solve this issue.
-                print(f"Error while trying to open excel file:\n{error}\n\nIf this is an unknown reason, please, try to save the excel file using the older excel extension (xls) and try again with the new file.")
-                sys.exit()
+        sheet2df = pd.read_excel(inputfile, sheet_name=None, header=None)
 
         print('Found Worksheets:')
         for sheet, data in sheet2df.items():
-                print(sheet)
                 print(" - {}".format(sheet))
                 outfile =  sheet2df[sheet]
                 outfile.to_csv("{}_{}.txt".format(outprefix, sheet.replace(' ','-')),sep='\t',encoding='utf-8', header=None, index=False)
