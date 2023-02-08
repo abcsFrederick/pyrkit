@@ -25,18 +25,22 @@ config = {
     }
 }
 
-field_to_update = {
-    #project
-    "Collaborators":"collaborators",
-    "Study Disease":"study_disease",
-    #sample
-    "CANCER_HISTOLOGY":"cancer_histology",
-    "Histology ":"histology",
-    "Library ID":"library_id",
-    "Library Layout":"library_layout",
-    "Reference Genome Assembly":"reference_genome_assembly",
-    "Treatment Protocol":"treatment_protocol"
-}
+def field_to_update(field):
+    field = field.lower().replace(' ','_')
+    return field
+
+#field_to_update = {
+#    #project
+#    "Collaborators":"collaborators",
+#    "Study Disease":"study_disease",
+#    #sample
+#    "CANCER_HISTOLOGY":"cancer_histology",
+#    "Histology ":"histology",
+#    "Library ID":"library_id",
+#    "Library Layout":"library_layout",
+#    "Reference Genome Assembly":"reference_genome_assembly",
+#    "Treatment Protocol":"treatment_protocol"
+#}
 
 
 def help():
@@ -243,12 +247,12 @@ def field2DME(data, data_catelog):
         for common_name, user_value in metadict.items():
             try:
                 dme_name = data_catelog[collection_type][common_name][0]
-            except:
+            except KeyError: # sample dict key is sample_id and not collection type
                 try:
-                    dme_name = field_to_update[common_name]
-                    print(f"'{common_name}' not found in dictionary, transformint it to: '{dme_name}'")
-                except KeyError: # sample dict key is sample_id and not collection type
                     dme_name = data_catelog['Sample'][common_name][0]
+                except:
+                    dme_name = field_to_update(common_name)
+                    print(f"'{common_name}' not found in dictionary, transforming it to: '{dme_name}'")
             
             converted[collection_type][dme_name] = user_value
 
@@ -342,7 +346,6 @@ def dict2list(mydict, mylist, i, override_index=[]):
             if v in override_index:
                 index = 0
 
-            print(v)
             values_list.append(metadict[v][index])
 
     return values_list
