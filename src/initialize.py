@@ -440,15 +440,15 @@ def _project(parsed_data, template, opath, dme_vault, pid):
             else:
                 # Get dme field names for collection and write output to file
                 #poc, origin, nsamples, method, sdate = dict2list(parsed_data, ["contact_name", "origin", "number_of_cases", "method", "project_start_date"], i=i, override_index=["contact_name", "project_start_date"])
-                poc, origin, sdate = dict2list(parsed_data, ["contact_name", "origin", "project_start_date"], i=i, override_index=["contact_name", "project_start_date"])
+                poc, origin, method, organism, sdate = dict2list(parsed_data, ["contact_name", "origin", "method", "source_organism", "project_start_date"], i=i, override_index=["contact_name", "project_start_date"])
                 project_scientist = poc
                 poc = poc.replace(" ","")
                 origin = origin.replace(" ","-")
-                #method = method.replace(" ","-")
+                method = method.replace(" ","-")
                 sdate = sdate.split()[0]
 
                 #collection_name = 'Project_{}_{}_{}{}_{}'.format(poc, origin, nsamples, method, sdate)
-                collection_name = 'Project_{}_{}_{}'.format(poc, origin, sdate)
+                collection_name = 'Project_{}_{}_{}_{}_{}'.format(poc, origin, method, organism, sdate)
 
                 if pid:
                     # Attribute "project_id" is a required field in DTB vault
