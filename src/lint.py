@@ -440,12 +440,17 @@ def project_to_sample_metadata(project, sample):
 def count_sample_field(sample, field):
     """Return the number of times each value in a given field has been filled.
     """
+    values  = []
     counter = {}
     for sid in sample.keys():
-        if field in counter.keys():
-            counter[field] += 1
+        if field not in sample[sid].keys():
+            return counter
+        values.append(sample[sid][field])
+    for v in values:
+        if v in counter.keys():
+            counter[v] += 1
         else:
-            counter[field] = 1
+            counter[v] = 1
     return counter
 
 def get_max_counter_field(counter):
@@ -475,12 +480,19 @@ def create_summary_of_samples(sample):
     """
     summary = f"This project contains {len(sample)} samples."
     for field in config['.sample_summary_fields']:
-        summary += f" In the {field} field,"
         counter = count_sample_field(sample,field)
+        if len(counter) == 0:
+            continue
+        breaker = False
         for value in counter.keys():
-            summary += f" {counter[value]} samples had {value},"
+            if value is None or value == 'None':
+                breaker = True
+        if breaker:
+            continue
+        for value in counter.keys():
+            summary += f" {counter[value]} samples have {value},"
         summary = summary[:-1]
-        summary += '.'
+        summary += f" as the {field}."
 
     return summary
 

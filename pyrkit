@@ -206,6 +206,16 @@ function QC(){
   (cd "${2}"; python "${1}" "${2}"/*.txt )
 }
 
+function validate(){
+  # Validate the user-provided metadata
+  # Check for basic errors and if user provided all the require metadata
+  # See --request-template or $REQUEST_TEMPLATE in help for more information
+  # @INPUT $1 = PATH to pyrkit/src/validate.py program
+  # @INPUT $2 = PATH to the directory that will be uploaded to DME
+  # @INPUT $3 = DME Vault validate the data (i.e. /CCBR_Archive or /CCBR_EXT_Archive)
+  python "${1}" "${2}" "${3}"
+}
+
 function fingerprint(){
   # Generates a Unique Identifer for an Analysis
   # Analysis ID is determinstic and based on user inputs to pipeline
@@ -247,8 +257,7 @@ function fingerprint(){
     # Get MD5 checksum if evaluating an input file
     ifile=$(if [[ -f "$value" ]]; then md5sum "$value" | awk '{print $1}'; else echo "$value"; fi)
     echo -e "$field\t$ifile"
-  done < <(grep -v '^gtf_ver\|^assembly_name' "${2}/run_metadata.txt" | sort -k2,2) \
-  > "${2}/run_inputs.md5"
+  done < <(grep -v '^gtf_ver\|^assembly_name' "${2}/run_metadata.txt" | sort -k2,2) > "${2}/run_inputs.md5"
 
   # Add MD5 checksum of all inputs and create an analysis id to run metadata
   inputs_md5=$(md5sum "${2}/run_inputs.md5" | awk '{print $1}')
@@ -628,12 +637,16 @@ function main(){
   multi "${INPUT_DIRECTORY%/}" "${output}/${analysis_home}" "${MULTIQC_DIRECTORY%/}" "${REQUEST_TEMPLATE}" \
         "${repohome}/src/meta" "$dme_analysis_home" "${inputs_md5}"
 
+  # Validate that the collections are not yet in DME and if so what are the metadata upload that will take place
+  #validate "${repohome}/src/validate.py" "${output}" "/${OUTPUT_VAULT#/}"
+
   # # Dry-run dm_register_directory command
   dryrun "${output}" "${DME_REPO%/}" "/${OUTPUT_VAULT#/}"
 
-  #cd ${output}
-  #echo $PWD
-  #dm_register_directory -s -t 2 -e <(echo '**.metadata.json') upload "/${OUTPUT_VAULT#/}"
+  cd ${output}
+  echo $PWD
+  dm_register_directory -s -t 2 -e <(echo '**.metadata.json') upload "/${OUTPUT_VAULT#/}"
+  #dm_register_directory -s -e <(echo '**.metadata.json') upload "/${OUTPUT_VAULT#/}"
  
   # Push to HPC DME if --dry-run option NOT provided
   if [ "$DRY_RUN" = "no" ]; then
