@@ -131,6 +131,7 @@ def valid_config(parameter, field):
     return
 
 def _create_parser(multqc_path,sample_meta_path):
+    """Create the parser to add informations to the group file."""
     create_file = f"echo \"Sample\tTissueType\"  > \"{multqc_path}/sample_group.txt\""
     add_sample_info = f"jq -r 'to_entries[] | [.value.\"Sample Name\", .value.Group] | @tsv' \"{sample_meta_path}/sample.json\" | sed 's/\tnan$/\tUnknown/g' >> \"{multqc_path}/sample_group.txt\""
     exit_code(os.system(create_file))
@@ -159,15 +160,13 @@ def validate(user_inputs):
 
 
 def _replace(s):
-    """Replace bad character of the input string to be handled by bash. 
-    """
+    """Replace issue characters of the input string to be handled by bash."""
     s = s.replace('(','\(').replace(')','\)')
     return s
 
 
 def _get_sample_id(sample_metadata):
-    """Returns the sample id from the sample_metadata dictionary. 
-    """
+    """Returns the sample id from the sample_metadata dictionary."""
     for m in sample_metadata:
         if m['attribute'] == 'raw_file_1':
             return m['value']
@@ -175,8 +174,7 @@ def _get_sample_id(sample_metadata):
 
 
 def exit_code(val):
-    """Breaks if the exit code from a bash command receives an error signal.
-    """
+    """Breaks if the exit code from a bash command receives an error signal."""
     if (val == 1):#Update != 0
         estart, eend = config['.error']
         print("{}Error:{} in pipeline... exiting".format(estart, eend), file=sys.stderr)
@@ -184,7 +182,6 @@ def exit_code(val):
 
 
 def main():
-
     # @args(): Parses positional command-line args
     # @validate(): Checks if user inputs are vaild
     meta_sheet, input_path, output_path, vault, multiQC_path, dryrun, update, full_pipe = validate(args(sys.argv))
@@ -193,17 +190,18 @@ def main():
     cstart, cend = config['.warning']
     estart, eend = config['.error']
 
+    # Execute all of the previous steps from the pyrkit pipeline
     if (full_pipe):
         exit_code(os.system(f"python src/lint.py {meta_sheet} {output_path}"))
         if (multiQC_path != ''):
             _create_parser(multiQC_path,output_path)
             exit_code(os.system(f"python src/pyparser.py {multiQC_path}/*.txt"))
             file = "multiqc_matrix.tsv"
-            #file = "tmultiqc_matrix.tsv"
             exit_code(os.system(f"python src/initialize.py {output_path} {output_path}/meta {vault} --convert -m {file}"))
         else:
             exit_code(os.system(f"python src/initialize.py {output_path} {output_path}/meta {vault} --convert"))
 
+    # With the data/metadata created, register PI_Lab collection
     pi_dir = [f for f in os.listdir(f"{output_path}/meta") if ".metadata.json" not in f][0]
     pi_meta_fadd = f"{output_path}/meta/{pi_dir}.metadata.json"
     pi_meta_file = open(pi_meta_fadd)
@@ -212,6 +210,7 @@ def main():
     print('- Uploading PI_Lab metadata')
     exit_code(os.system(pi_command))
 
+    # With the data/metadata created, register Project collection
     project_dir = [f for f in os.listdir(f"{output_path}/meta/{pi_dir}") if ".metadata.json" not in f][0]
     project_meta_fadd = f"{output_path}/meta/{pi_dir}/{project_dir}.metadata.json"
     project_meta_file = open(project_meta_fadd)
@@ -220,6 +219,7 @@ def main():
     print('- Uploading Project metadata')
     exit_code(os.system(project_command))
 
+    # With the data/metadata created, register Sample collections
     samples_dir = [f for f in os.listdir(f"{output_path}/meta/{pi_dir}/{project_dir}") if ".metadata.json" not in f]
     samples_meta_fadd = [f"{output_path}/meta/{pi_dir}/{project_dir}/{sd}.metadata.json" for sd in samples_dir]
     samples_meta_file = [open(sa) for sa in samples_meta_fadd]
@@ -243,6 +243,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-#python tests/upload_pipe.py data/metadata_v15.xlsx data_test/ DME/ CCBR_Archive mqc_test -u -f
-#dm_delete_collection -r /CCBR_Archive/PI_Lab

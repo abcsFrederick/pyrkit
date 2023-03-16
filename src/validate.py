@@ -9,6 +9,7 @@ import dme_utils as dme
 # Configuration for defining valid sheets and other default values
 config = {
     ".warning": ["\033[93m", "\033[00m"], ".error": ["\033[91m", "\033[00m"],
+    ".important": ["\033[42m", "\033[00m"],#or 92
     ".vaults": ["CCBR_Archive", "CCBR_EXT_Archive", "CCR_DTB_Archive"]
 }
 
@@ -105,6 +106,7 @@ def validate_args(user_inputs):
     valid_vaults = config[".vaults"]
     ipath, vault = user_inputs
     
+    vault = vault.replace("/","")
     assert vault in valid_vaults, "{} is not a vaild DME vault! Please choose from one of the following: {}".format(vault, valid_vaults)
     path_exists(ipath)
 
@@ -122,6 +124,7 @@ def json2dict(file):
     return data
 
 def get_pi_lab(path):
+    """Get the PI_Lab directory address at DME and its metadata."""
     files = [f for f in os.listdir(path) if 'PI_Lab' in f and '.metadata.json' in f]
     cstart, cend = config['.error']
     if len(files) != 1:
@@ -133,6 +136,7 @@ def get_pi_lab(path):
     return meta, directory
 
 def get_project(path):
+    """Get the Project directory address at DME and its metadata."""
     files = [f for f in os.listdir(path) if 'Project_' in f and '.metadata.json' in f]
     cstart, cend = config['.error']
     if len(files) != 1:
@@ -144,12 +148,15 @@ def get_project(path):
     return meta, directory
 
 def get_analysis_objects(path):
+    """Get the Analysis object addresses at DME and their metadata."""
     files = [f for f in os.listdir(path) if '.metadata.json' in f]
-    directories = [path + '/' + f.split('.')[0] for f in files]
+    #directories = [path + '/' + f.split('.')[0] for f in files]
+    directories = [path + '/' + f.split('.metadata.json')[0] for f in files]
     metas = [json2dict(f"{path}/{f}") for f in files]
     return metas, directories
 
 def get_analysis(path):
+    """Get the Primary Analysis directory address at DME and its metadata."""
     files = [f for f in os.listdir(path) if 'Primary_Analysis_' in f and '.metadata.json' in f]
     cstart, cend = config['.error']
     if len(files) != 1:
@@ -162,12 +169,15 @@ def get_analysis(path):
     return meta, directory, objects, objects_dir
 
 def get_sample_objects(path):
+    """Get the Sample object addresses at DME and their metadata."""
     files = [f for f in os.listdir(path) if '.metadata.json' in f]
-    directories = [path + '/' + f.split('.')[0] for f in files]
+    #directories = [path + '/' + f.split('.')[0] for f in files]
+    directories = [path + '/' + f.split('.metadata.json')[0] for f in files]
     metas = [json2dict(f"{path}/{f}") for f in files]
     return metas, directories
 
 def get_samples(path):
+    """Get the Sample directory address at DME and their metadata."""
     files = [f for f in os.listdir(path) if 'Sample_' in f and '.metadata.json' in f]
     directories = [path + '/' + f.split('.')[0] for f in files]
     metas = [json2dict(f"{path}/{f}") for f in files]
@@ -177,6 +187,7 @@ def get_samples(path):
     return metas, directories, objects, objects_dir
 
 def get_dme_directory(full_path,initial_path,vault):
+    """Clear the DME directory path."""
     path = vault + '/' + full_path[len(initial_path):]
     path = path.replace('//','/')
     if path[0] != '/':
@@ -184,7 +195,9 @@ def get_dme_directory(full_path,initial_path,vault):
     return path
 
 def get_different_fields(meta_dme,meta_local):
-    print(meta_dme,meta_local)
+    """Evaluate which fields exists already on DME, which ones exists only locally
+    and which of them are in both places."""
+    #print(meta_dme,meta_local)
     items_only_dme = []
     items_only_local = []
     items_both = []
@@ -210,13 +223,14 @@ def get_different_fields(meta_dme,meta_local):
     return items_only_dme, items_only_local, items_both
 
 def evaluate_differences(meta_dme,meta_local):
+    """Print the differences between existing metadata and the ones that will replace."""
     items_only_dme, items_only_local, items_both = get_different_fields(meta_dme,meta_local)
-    print(f"There are:\n - {len(items_only_dme)} attributes only on DME\n - {len(items_only_local)} attributes to be append\n - {len(items_both)} attributes in both lists.")
+    print(f"   There are:\n   > {len(items_only_dme)} attributes only on DME\n   > {len(items_only_local)} attributes to be appended\n   > {len(items_both)} attributes in both lists.")
     for att_i in items_only_local:
         for i in range(len(meta_local)):
             att = meta_local[i]['attribute']
             if (att == att_i):
-                print(f"The attribute \'{att}\' will be appended with value as \'{meta_local[i]['value']}\'")
+                print(f"   ! The attribute \'{att}\' will be appended with value as \'{meta_local[i]['value']}\'")
     for att in items_both:
         for i in range(len(meta_local)):
             att_i = meta_local[i]['attribute']
@@ -228,20 +242,33 @@ def evaluate_differences(meta_dme,meta_local):
                     continue
                 
                 if meta_local[i]['value'] != meta_dme[j]['value']:
-                    print(f"The attribute \'{att}\' will be modified from \'{meta_dme[j]['value']}\' to \'{meta_local[i]['value']}\'")
-    print(items_only_dme, items_only_local, items_both)
+                    try:
+                        if float(meta_local[i]['value']) != float(meta_dme[j]['value']):
+                            print(f"   ! The attribute \'{att}\' will be modified from \'{meta_dme[j]['value']}\' to \'{meta_local[i]['value']}\'")
+                    except:
+                        print(f"   ! The attribute \'{att}\' will be modified from \'{meta_dme[j]['value']}\' to \'{meta_local[i]['value']}\'")
 
-def evaluate_metadata_differences(session,meta_dir,meta):
-    #meta0 = session.get_dataObject_dme_meta(meta_dir)
-    #print(meta0)
-    evaluate_differences(meta['metadataEntries'][:-1],meta['metadataEntries'][1:])
+def evaluate_metadata_differences(session,meta_dir,meta,level="",is_collection=False):
+    """Evaluate the differences between existing metadata and the ones that will replace."""
+    if is_collection:
+        meta_dme = session.get_collection_dme_meta(meta_dir,in_pairs=False)
+    else:
+        meta_dme = session.get_dataObject_dme_meta(meta_dir,in_pairs=False)
+
+    if len(meta_dme) == 0:
+        print(f"{level} does not exist on DME!")
+        return False
+
+    print("{}Warning:{} {} already exists on DME!".format(*config['.warning'], level), file=sys.stderr)
+    evaluate_differences(meta_dme['metadataEntries'],meta['metadataEntries'])
+    return True
 
 def main():
 
+    print("\n\n###### VALIDATION STEP #####\n")
     # @args(): Parses positional command-line args
     # @validate_args(): Checks if user inputs are vaild
     ipath, vault = validate_args(args(sys.argv))
-    print(ipath,vault)
 
     # Read in JSON files as dictionary
     pi_meta, pi_dir = get_pi_lab(ipath)
@@ -251,12 +278,47 @@ def main():
     
     # Create DME Session
     dme_session = dme.DMESession()
-    print(dme_session.dme_url)
+    print(f"DME session URL: {dme_session.dme_url}")
 
     # Evaluate the existence of the project at the DME and the differences between meta to be added and already in DME
+    ci, cf = config['.important']
+    # PI_Lab level
+    print(f"\n{ci} - PI_Lab level: {pi_dir.split('/')[-1]}{cf}")
     pi_dir_dme = get_dme_directory(pi_dir,ipath,vault)
-    pi_exists = evaluate_metadata_differences(dme_session,pi_dir_dme,pi_meta)
+    pi_exists = evaluate_metadata_differences(dme_session,pi_dir_dme,pi_meta,"PI_Lab",True)
+    
+    if (pi_exists):
+        # Project level
+        print(f"\n{ci} - Project level: {proj_dir.split('/')[-1]}{cf}")
+        proj_dir_dme = get_dme_directory(proj_dir,ipath,vault)
+        proj_exists = evaluate_metadata_differences(dme_session,proj_dir_dme,proj_meta,"Project",True)
+
+        if (proj_exists):
+            # Primary Analysis level
+            print(f"\n{ci} - Primary Analysis level: {analysis_dir.split('/')[-1]}{cf}")
+            analysis_dir_dme = get_dme_directory(analysis_dir,ipath,vault)
+            analysis_exists = evaluate_metadata_differences(dme_session,analysis_dir_dme,analysis_meta,"Primary Analysis",True)
+
+            if (analysis_exists):
+                # Data Objects
+                for i in range(len(analysis_objs)):
+                    print(f" * Data Object {analysis_objs_dir[i].split('/')[-1]}:")
+                    obj_dir_dme = get_dme_directory(analysis_objs_dir[i],ipath,vault)
+                    sample_exists = evaluate_metadata_differences(dme_session,obj_dir_dme,analysis_objs[i],"DataObject",False)
+            
+            # Sample level
+            for i in range(len(samples_meta)):
+                print(f"\n{ci} - Sample level: {samples_dir[i].split('/')[-1]}{cf}")
+                sample_dir_dme = get_dme_directory(samples_dir[i],ipath,vault)
+                sample_exists = evaluate_metadata_differences(dme_session,sample_dir_dme,samples_meta[i],"Sample",True)
+
+                if (sample_exists):
+                    # Data Objects
+                    for j in range(len(sample_objs[i])):
+                        print(f" * Data Object {sample_objs_dir[i][j].split('/')[-1]}:")
+                        obj_dir_dme = get_dme_directory(sample_objs_dir[i][j],ipath,vault)
+                        obj_exists = evaluate_metadata_differences(dme_session,obj_dir_dme,sample_objs[i][j],"DataObject",False)
+    
 
 if __name__ == '__main__':
-
     main()
