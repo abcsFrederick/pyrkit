@@ -541,9 +541,9 @@ function multi(){
   cp "${1}/DEG_ALL/RSEM.isoforms.TPM.all_samples.txt" "${2}/RSEM_isoforms_TPM_normalized.tsv"
 
   # Reformat for downstream analysis and remove suffix expected_counts
-  #fix "${2}/RSEM_genes_expected_counts.tsv" "${2}/RSEM_isoforms_expected_counts.tsv" \
-  #  "${2}/RSEM_genes_FPKM_normalized.tsv" "${2}/RSEM_isoforms_FPKM_normalized.tsv" \
-  #  "${2}/RSEM_genes_TPM_normalized.tsv" "${2}/RSEM_isoforms_TPM_normalized.tsv"
+  fix "${2}/RSEM_genes_expected_counts.tsv" "${2}/RSEM_isoforms_expected_counts.tsv" \
+    "${2}/RSEM_genes_FPKM_normalized.tsv" "${2}/RSEM_isoforms_FPKM_normalized.tsv" \
+    "${2}/RSEM_genes_TPM_normalized.tsv" "${2}/RSEM_isoforms_TPM_normalized.tsv"
 
 
   # Symlink remaining files to Primary Analysis collection
