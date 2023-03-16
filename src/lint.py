@@ -504,7 +504,7 @@ def add_default_project_metadata(project, sample):
     for field in config['.add_project_field'].keys():
         project[field] = [config['.add_project_field'][field]]
     project['Summary of Samples'] = [create_summary_of_samples(sample)]
-    #project['Number of Samples'] = [len(sample)]
+    project['Number of Samples'] = [len(sample)]
     return project
     
 

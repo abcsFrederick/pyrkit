@@ -62,6 +62,14 @@ optional.add_argument('-n', '--dry-run', action = 'store_true', default = 'no',
                     all the normal steps of the pyrkit workflow will be executed but data \
                     will NOT be pushed into HPC DME. This is useful for debugging purposes or \
                     if you are not ready to push everything into HPC DME. Example: --dry-run')
+optional.add_argument('-l', '--local-run', action = 'store_true', default = 'no',
+                    help='Local-run allows the user to upload the data lucally without submitting \
+                    jobs to biowulf.')
+optional.add_argument('-v', '--validate', action = 'store_true', default = 'no',
+                    help='Include a validation step on the pipeline, where it searches if the PI_Lab \
+                    already exists, and if so, search if the Project already exist as well. If the data \
+                    matches some entries that are already stored at DME, it will show all of the metadata \
+                    that will be append to existing project and which attributes are being modified, if any.')
 optional.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS,
                     help='Display help message and exit')
 optional.add_argument('--version', action='version',
@@ -581,11 +589,11 @@ function main(){
   #   $MULTIQC_DIRECTORY = MultiQC HOME
   #   $PROJECT_ID  =  Project ID
   #   $DRY_RUN     =  Dry run workflow
+  #   $LOCAL_RUN   =  Upload data locally
   #   $DME_REPO    =  Path to DME git install
 
   # Check system dependencies are installed
-  #require git jq python/3.5
-  require git jq python/3.9
+  require git jq python/3.7
 
   # Check for version flag
   case ${1:-} in
@@ -598,11 +606,12 @@ function main(){
   # Enable argparse parsing within bash
   source "$(dirname "$0")/src/argparse.bash" || \
     fatal "Fatal: Failed to locate argparse.bash in ${repohome}!"
-    
+  
+
   # Parse command-line arguments with argparse
   if [ $# -eq 0 ]; then parser -h; fi  # Display usage, user did not provide any args
   parser "${@}"
-
+  
   # Base directory for all intermediate output files
   output="${INPUT_DIRECTORY%/}/DME"
   # Set Defaults for Optional arguments
@@ -638,21 +647,25 @@ function main(){
         "${repohome}/src/meta" "$dme_analysis_home" "${inputs_md5}"
 
   # Validate that the collections are not yet in DME and if so what are the metadata upload that will take place
-  #validate "${repohome}/src/validate.py" "${output}" "/${OUTPUT_VAULT#/}"
+  if [ "$VALIDATE" = "yes" ]; then
+    validate "${repohome}/src/validate.py" "${output}/upload" "/${OUTPUT_VAULT#/}"
+  fi
 
   # # Dry-run dm_register_directory command
   dryrun "${output}" "${DME_REPO%/}" "/${OUTPUT_VAULT#/}"
 
-  cd ${output}
-  echo $PWD
-  dm_register_directory -s -t 2 -e <(echo '**.metadata.json') upload "/${OUTPUT_VAULT#/}"
-  #dm_register_directory -s -e <(echo '**.metadata.json') upload "/${OUTPUT_VAULT#/}"
- 
   # Push to HPC DME if --dry-run option NOT provided
   if [ "$DRY_RUN" = "no" ]; then
-    jobid=$(sbatch -J "pyrkit" --mem=24g --cpus-per-task=4 --time=24:00:00 \
-      "${repohome}/src/submit.sh" "${output}" "${DME_REPO%/}" "/${OUTPUT_VAULT#/}")
-    echo "Submiting Job ${jobid} to push data into DME"
+    if [ "$LOCAL_RUN" = "yes" ]; then
+      cd ${output}
+      echo "Uploading data locally to DME"
+      echo $PWD
+      dm_register_directory -s -t 2 -e <(echo '**.metadata.json') upload "/${OUTPUT_VAULT#/}"
+    else
+      jobid=$(sbatch -J "pyrkit" --mem=24g --cpus-per-task=4 --time=24:00:00 \
+        "${repohome}/src/submit.sh" "${output}" "${DME_REPO%/}" "/${OUTPUT_VAULT#/}")
+      echo "Submiting Job ${jobid} to push data into DME"
+    fi
   fi
 
 }

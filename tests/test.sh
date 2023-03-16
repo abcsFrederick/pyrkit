@@ -1,2 +1,0 @@
-# ./pyrkit -n -i /home/degenhardthf/pyrkit_loc/data_real/runner_mm10_25 -o /CCBR_Archive -r /home/degenhardthf/pyrkit_loc/data/metadata_v15-ACGT_Mouse.xlsx -d /home/degenhardthf/HPC_DME_APIs/ -m /home/degenhardthf/pyrkit_loc/data_real/runner_mm10_25/Reports/multiqc_data
-# ./pyrkit -n -i /home/degenhardthf/pyrkit_loc/data_real/runner_hg38_36_2 -o /CCBR_Archive -r /home/degenhardthf/pyrkit_loc/data/metadata_v15-ACGT_Mouse.xlsx -d /home/degenhardthf/HPC_DME_APIs/ -m /home/degenhardthf/pyrkit_loc/data_real/runner_hg38_36_2/Reports/multiqc_data
