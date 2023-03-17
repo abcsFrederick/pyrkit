@@ -33,9 +33,11 @@ config = {
         }
     },
     "project_template": {
-        "sheet_name": "Project Template",
-        "test_sheet": "Example Project",
-        "skip_lines": [0,1],
+        "sheet_name": "Required Fields - User Form",
+        "test_sheet": "Required Fields - User Form",
+        "skip_lines": [0],
+        "nrows": 14,
+        "nrows_PI_Lab": 3,
         "singularities": [
                             'PI Name', 'PI Affiliation', 'Project Title',
                             'Project Description', 'Start Date',
@@ -53,9 +55,57 @@ config = {
                 ]
     },
     "sample_template": {
-        "sheet_name": "Sample Template",
-        "test_sheet": "Example Sample",
-        "skip_lines": [0,1],
+        "sheet_name": "Required Fields - User Form",
+        "test_sheet": "Required Fields - User Form",
+        "skip_lines": 17
+    },
+    "project_dbGaP": {
+        "sheet_name": "Recommended Fields for dbGaP",
+        "test_sheet": "Recommended Fields for dbGaP",
+        "skip_lines": 3,
+        "nrows": 6,
+        "nrows_PI_Lab": 0
+    },
+    "sample_dbGaP": {
+        "sheet_name": "Recommended Fields for dbGaP",
+        "test_sheet": "Recommended Fields for dbGaP",
+        "skip_lines": 11
+    },
+    "project_CDS": {
+        "sheet_name": "Recommended Fields for CDS",
+        "test_sheet": "Recommended Fields for CDS",
+        "skip_lines": 3,
+        "nrows": 1,
+        "nrows_PI_Lab": 0
+    },
+    "sample_CDS": {
+        "sheet_name": "Recommended Fields for CDS",
+        "test_sheet": "Recommended Fields for CDS",
+        "skip_lines": 6
+    },
+    "project_GEO": {
+        "sheet_name": "Recommended Fields for GEO",
+        "test_sheet": "Recommended Fields for GEO",
+        "skip_lines": 3,
+        "nrows": 6,
+        "nrows_PI_Lab": 0
+    },
+    "sample_GEO": {
+        "sheet_name": "Recommended Fields for GEO",
+        "test_sheet": "Recommended Fields for GEO",
+        "skip_lines": 11,
+    },
+    "project_GDC": {
+        "sheet_name": "Recommended Fields for GDC",
+        "test_sheet": "Recommended Fields for GDC",
+        "skip_lines": 3,
+        "nrows": 7,
+        "nrows_PI_Lab": 0
+    },
+    "sample_GDC": {
+        "sheet_name": "Recommended Fields for GDC",
+        "test_sheet": "Recommended Fields for GDC",
+        "skip_lines": 12,
     }
 }
 
@@ -63,30 +113,24 @@ config = {
 def help():
         return """
 lint.py: Parses user-provided metadata spreadsheet and checks for errors.
-
 USAGE:
     python lint.py <project_request_spreadsheet> <output_directory> [-h]
-
 Required Positional Arguments:
     [1] project_request_sheet     Type [File]: A filled out project request out form.
                                   This spreadsheet is sent out to the PI or post-doc
                                   that is requesting our assistance. Please see
                                   "data/experiment_metadata.xlsx" as an example.
-
     [2] output_directory          Type [Path]: Absolute or relative PATH for output
                                   files. If the PATH does not exist, it will be
                                   automatically created during runtime.
 Options:
     [-h, --help]                  Displays usage and help information for the script.
     [-n, --dry-run]               Dry-run using the included example sheets.
-
 Example:
     # Run against user-provided information: "Project Template", "Sample Template"
     $ python lint.py data/experiment_metadata.xlsx /scratch/$USER/DME_Upload/
-
     # Dry-run against included examples: "Example Project", "Example Sample"
     $ python lint.py data/experiment_metadata.xlsx /scratch/$USER/DME_Upload/ -n
-
 Requirements:
     python >= 3.5
       + pandas
@@ -106,7 +150,7 @@ def args(argslist, dryrun = False):
 
     # Check for dry-run boolean flag
     elif '-n' in user_args or '--dry-run' in user_args:
-        print('Dry-running with included example sheets: "Example Project", "Example Sample"')
+        print(f"Dry-running with included example sheets: {config['project_template']['test_sheet']}, {config['sample_template']['test_sheet']}")
         user_args = [arg for arg in user_args if arg not in ['-n', '--dry-run']]
         dryrun = True
 
@@ -152,7 +196,7 @@ def file_exists(filename):
     return
 
 
-def contains_sheets(spreadsheet):
+def contains_sheets(spreadsheet,print_sheets=False):
     """Checks to see if user-provided spreadsheet contains all the required sheets
     that are defined in the config specification. Please see config['.sheets']
     for all required sheets.
@@ -161,6 +205,8 @@ def contains_sheets(spreadsheet):
     required = config['.sheets']
     df = pd.read_excel(spreadsheet, sheet_name=None, header=None)
     valid_sheets = [sheet for sheet in df.keys() if sheet in required]
+    if print_sheets:
+        print([sheet for sheet in df.keys()])
 
     if sorted(valid_sheets) != sorted(required):
         # Required sheet not in spreadsheet
@@ -254,22 +300,21 @@ def _remove_trailing_nan(linelist):
     return clean
 
 
-def _parsed_project(excel_df):
+def _parsed_project(excel_df, config_id):
     """Private function for 'project()' to parse the Project Template sheet.
     This function generates the following parsed values: collection_type, field,
     project_value_list.
     """
+    nrows_collection_PI_Lab = config[config_id]["nrows_PI_Lab"]
     for i, row in excel_df.iterrows():
         # Project information follows a key, value_list pattern
         attr, *project_value_list = [str(field).lstrip().rstrip() for field in row]
         # Pass over lines with no attribute or key
         if not attr or attr == 'nan' or attr.lower().startswith('optional field'):
             continue
-        # Get collection type: PI, Project, Sample
-        elif "collection" in attr.lower():
-            collection_type = project_value_list[0]
-            continue
-
+        # Get collection type: PI, Project
+        collection_type = 'PI_Lab' if i < nrows_collection_PI_Lab else 'Project'
+        
         # Remove trailing empty cells or nan's
         project_value_list = _remove_trailing_nan(project_value_list)
 
@@ -277,23 +322,25 @@ def _parsed_project(excel_df):
 
 
 
-def project(sheet, spreadsheet, log_route):
+def project(config_id, sheet, spreadsheet, log_route):
     """Parses the 'Project Template' sheet in the project_request_spreadsheet
     to extract PI-level and Project-level metadata. Returns a nested dictionary where
     [key1] = collection_type (PI, Project), [key2] = field, and the value is a list
     of values where each value is metadata for a sub-project [Proj-1_attr, Proj-2_attr, ...].
     A log file gets created in '{user-defined-outpath}/logs/project_information.txt'.
     """
-    skipover = config["project_template"]["skip_lines"]
+    skipover = config[config_id]["skip_lines"]
+    nrows = config[config_id]["nrows"]
     metadata = {}
 
     # Skip over reading the first line or header
-    df = pd.read_excel(spreadsheet, sheet_name=sheet, header=None, skiprows=skipover)
+    df = pd.read_excel(spreadsheet, sheet_name=sheet, header=None, usecols=[0,1], skiprows=skipover, nrows=nrows)
+
     # Creating logging output file
     outfh = open(os.path.join(log_route, "project_information.txt"), "w")
 
     mvds = [] # Find the number of sub-projects or the number of MVDs an attribute can have
-    for col, field, pro_attr_list in _parsed_project(excel_df = df):
+    for col, field, pro_attr_list in _parsed_project(excel_df = df,config_id = config_id):
         outfh.write("{}\t{}\t{}\n".format(col, field, "\t".join(pro_attr_list)))
         if col not in metadata:
             metadata[col] = {}
@@ -302,26 +349,42 @@ def project(sheet, spreadsheet, log_route):
         mvds.append(len(pro_attr_list))
 
     outfh.close()
+    
+    return (metadata, sorted(mvds)[-3]) if config_id == 'project_template' else metadata
 
-    return metadata, sorted(mvds)[-3]
 
-
-def _parsed_sample(excel_df):
+def _parsed_sample(excel_df, config_id):
     """Private function for 'sample()' to parse the Sample Template sheet.
     This function generates the following parsed values: SampleID, field,
     sample_metadata_value.
     """
+    cstart, cend = config['.warning']
+    estart, eend = config['.error']
+    attr_id = -1
     for i, row in excel_df.iterrows():
-        attr, *project_value_list = [str(field).lstrip().rstrip() for field in row]
+        project_value_list = [str(field) for field in row]
+        
+        #Find equivalent of the sample id
+        if attr_id < 0:
+            for j in range(len(project_value_list)):
+                if (project_value_list[j].lower() == 'raw data sample name'):
+                    attr_id = j
+        
+        if (attr_id < 0):
+            print("{}Error:{} Failed to provide required field 'Raw Data Sample Name' on sheet {}...".format(estart, eend, config_id), file=sys.stderr)
+            sys.exit(1)
+        attr = project_value_list[attr_id]
+        
         # Pass over lines with no attribute or key
         if not attr or attr == 'nan' or attr.lower().startswith('optional field'):
             continue
+            
         # Check if header and clean
-        if attr.lower() == 'sample id':
+        if str(attr).lower() == 'raw data sample name':
             header = _remove_trailing_nan(project_value_list)
             sid_field = attr
             continue
-
+        
         for j in range(0,len(header),1):
             yield attr, header[j], project_value_list[j]
         else:
@@ -329,21 +392,24 @@ def _parsed_sample(excel_df):
             yield attr, sid_field, attr
 
 
-def sample(sheet, spreadsheet, log_route):
+def sample(config_id, sheet, spreadsheet, log_route):
     """Parses the 'Sample Template' sheet in the project_request_spreadsheet
     to extract Sample-level metadata. Returns a nested dictionary where
     [key1] = SampleID, [key2] = field, and value = user-provided info.
     A log file gets created in '{user-defined-outpath}/logs/sample_information.txt'.
     """
-    skipover = config["sample_template"]["skip_lines"]
+    skipover = config[config_id]["skip_lines"]
     metadata = {}
 
     # Skip over reading the first line or header
     df = pd.read_excel(spreadsheet, sheet_name=sheet, header=None, skiprows=skipover)
+    if (config_id == 'sample_template'):
+        df.drop([1,2],inplace=True)
+    
     # Creating logging output file
     outfh = open(os.path.join(log_route, "sample_information.txt"), "w")
 
-    for sid, field, value in _parsed_sample(excel_df = df):
+    for sid, field, value in _parsed_sample(excel_df = df, config_id = config_id):
         outfh.write("{}\t{}\t{}\n".format(sid, field, value))
         if sid not in metadata:
             metadata[sid] = {}
@@ -493,6 +559,10 @@ def main():
     # @validate(): Checks if user inputs are vaild
     metadata, opath, sheets, dryrun = validate(args(sys.argv))
 
+    # Set warnings and error configs
+    cstart, cend = config['.warning']
+    estart, eend = config['.error'] 
+
     # Log file directory and parsed pickled data
     logs = os.path.join(opath, "logs")
     path_exists(logs)
@@ -513,12 +583,17 @@ def main():
     # Get specification for parsing 'Project Template'
     project_info = config["project_template"][this_template]
     # Get all project metadata from Project Template
-    project_dictionary, subprojects = project(sheet = project_info, spreadsheet = metadata, log_route = logs)
+    project_dictionary, subprojects = project(config_id = 'project_template', sheet = project_info, spreadsheet = metadata, log_route = logs)
+    # Get all project metadata from additional sheets 
+    additionals = ['project_dbGaP', 'project_CDS', 'project_GEO', 'project_GDC']
+    project_additionals = [project(config_id = add, sheet = config[add]['sheet_name'], spreadsheet = metadata, log_route = logs) for add in additionals]
+    # Merge additional metadata into project_dictionary
+    for add in project_additionals:
+        project_dictionary = merge_metadata(project_dictionary,add,'Project')
 
     # Get specification for parsing 'Sample Template'
     sample_info = config["sample_template"][this_template]
     # Get all sample metadata from Sample Template
-
     sample_dictionary = sample(config_id = "sample_template", sheet = sample_info, spreadsheet = metadata, log_route = logs)
     # Get all project metadata from additional sheets 
     additionals = ['sample_dbGaP', 'sample_CDS', 'sample_GEO', 'sample_GDC']
@@ -537,14 +612,16 @@ def main():
     missing = missing_fields(parsed_dict=project_dictionary, data_dict=meta_dictionary, collection_type="Project", requirements=config['.min_required'], Nsubprojects=subprojects)
     missing = missing_fields(parsed_dict=sample_dictionary, data_dict=meta_dictionary, collection_type="Sample", requirements=missing, ext=['Sample ID'])
 
-    # Check if user has provided all required check_fields
+    if missing:
+        print("{}Error:{} Failed to provide required field(s) {}... exiting".format(estart, eend, missing), file=sys.stderr)
+        sys.exit(1)
+    
+    # Check if user has provided all required check_fields extracted from dictionary sheet
     missing = missing_fields(parsed_dict=project_dictionary, data_dict=meta_dictionary, collection_type="Project", requirements=req_fields, Nsubprojects=subprojects)
     missing = missing_fields(parsed_dict=sample_dictionary, data_dict=meta_dictionary, collection_type="Sample", requirements=missing, ext=['Sample ID'])
 
     if missing:
-        estart, eend = config['.error']
-        print("{}Error:{} Failed to provide required field(s) {}...exiting".format(estart, eend, missing), file=sys.stderr)
-        sys.exit(1)
+        print("{}WARNING:{} Failed to provide field(s) {}...".format(cstart, cend, missing), file=sys.stderr)
 
     # Save parsed data as JSON file
     with open(os.path.join(opath, "data_dictionary.json"), 'w') as file:
