@@ -440,7 +440,7 @@ def _project(parsed_data, template, opath, dme_vault, pid):
             else:
                 # Get dme field names for collection and write output to file
                 #poc, origin, nsamples, method, sdate = dict2list(parsed_data, ["contact_name", "origin", "number_of_cases", "method", "project_start_date"], i=i, override_index=["contact_name", "project_start_date"])
-                poc, origin, method, organism, sdate, nsamples = dict2list(parsed_data, ["contact_name", "origin", "method", "source_organism", "project_start_date", "number_of_cases"], i=i, override_index=["contact_name", "project_start_date"])
+                poc, origin, method, organism, sdate, nsamples = dict2list(parsed_data, ["contact_name", "origin", "method", "organism", "project_start_date", "number_of_cases"], i=i, override_index=["contact_name", "project_start_date"])
                 project_scientist = poc
                 poc = poc.replace(" ","")
                 origin = origin.replace(" ","-")

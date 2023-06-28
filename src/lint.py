@@ -15,7 +15,8 @@ config = {
         'Data Owner', 'Data Owner Affiliation', 'Data Generator (for the Data Owner)', #Pi_Lab level
         'Project Title', 'Project Description', 'Data Generating Facility', 'Library Strategy', 'Start Date', 'Access', 'Summary of Samples', #Project level
         'Raw Data Sample Name', 'Sample Name', 'Sequencing Platform', 'Analyte Type', 'Organism'], #Sample level
-    ".project_to_sample": ['Sequencing Platform', 'Organism'],
+    ".project_to_sample": [['Sequencing Platform', 'Sequencing Platform'],
+                           ['Organism', 'Source Organism']],
     ".sample_to_project": ['Library Strategy'],
     ".add_project_field": {'Access': 'Closed Access'},
     ".sample_summary_fields": ['Disease','Library Strategy','Analyte Type','Tissue','Tissue Type','Age','Gender','Race'],
@@ -426,8 +427,10 @@ def project_to_sample_metadata(project, sample):
     defined in config.project_to_sample
     """
     for field in config['.project_to_sample']:
+        in_project = field[0]
+        in_sample = field[1]
         for sid in sample.keys():
-            sample[sid][field] = project[field][0]
+            sample[sid][in_sample] = project[in_project][0]
     return sample
 
 
