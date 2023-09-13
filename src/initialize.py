@@ -25,6 +25,23 @@ config = {
     }
 }
 
+def field_to_update(field):
+    field = field.lower().replace(' ','_')
+    return field
+
+#field_to_update = {
+#    #project
+#    "Collaborators":"collaborators",
+#    "Study Disease":"study_disease",
+#    #sample
+#    "CANCER_HISTOLOGY":"cancer_histology",
+#    "Histology ":"histology",
+#    "Library ID":"library_id",
+#    "Library Layout":"library_layout",
+#    "Reference Genome Assembly":"reference_genome_assembly",
+#    "Treatment Protocol":"treatment_protocol"
+#}
+
 
 def help():
         return """
@@ -231,7 +248,12 @@ def field2DME(data, data_catelog):
             try:
                 dme_name = data_catelog[collection_type][common_name][0]
             except KeyError: # sample dict key is sample_id and not collection type
-                dme_name = data_catelog['Sample'][common_name][0]
+                try:
+                    dme_name = data_catelog['Sample'][common_name][0]
+                except:
+                    dme_name = field_to_update(common_name)
+                    print(f"'{common_name}' not found in dictionary, transforming it to: '{dme_name}'")
+            
             converted[collection_type][dme_name] = user_value
 
     return converted
@@ -318,13 +340,13 @@ def dict2list(mydict, mylist, i, override_index=[]):
     """
     values_list = []
     for k, metadict in mydict.items():
-         #values_list = [metadict[v][i] for v in mylist ]
-         for v in mylist:
-             index = i
-             if v in override_index:
-                 index = 0
+        #values_list = [metadict[v][i] for v in mylist ]
+        for v in mylist:
+            index = i
+            if v in override_index:
+                index = 0
 
-             values_list.append(metadict[v][index])
+            values_list.append(metadict[v][index])
 
     return values_list
 
@@ -395,7 +417,9 @@ def _project(parsed_data, template, opath, dme_vault, pid):
     Project collection(s) is '1:M' (multiple sub-projects, i.e. RNA-seq and ATAC-seq).
     """
     subcollections = {}
-    subprojects = parsed_data["Project"]["request_type"]
+    #parsed_data["Project"]["request_type"] does not exist anymore in template v15
+    #subprojects = parsed_data["Project"]["request_type"]
+    subprojects = ['Data Analysis']
     singular_fields = config["project_template"]["singularity_required"]
 
     for i in range(0, len(subprojects), 1):
@@ -415,18 +439,21 @@ def _project(parsed_data, template, opath, dme_vault, pid):
                     temp['metadataEntries'].append({'attribute': field, 'value': val})
             else:
                 # Get dme field names for collection and write output to file
-                poc, origin, nsamples, method, sdate = dict2list(parsed_data, ["contact_name", "origin", "number_of_cases", "method", "project_start_date"], i=i, override_index=["contact_name", "project_start_date"])
+                #poc, origin, nsamples, method, sdate = dict2list(parsed_data, ["contact_name", "origin", "number_of_cases", "method", "project_start_date"], i=i, override_index=["contact_name", "project_start_date"])
+                poc, origin, method, organism, sdate, nsamples = dict2list(parsed_data, ["contact_name", "origin", "method", "organism", "project_start_date", "number_of_cases"], i=i, override_index=["contact_name", "project_start_date"])
                 project_scientist = poc
                 poc = poc.replace(" ","")
                 origin = origin.replace(" ","-")
                 method = method.replace(" ","-")
                 sdate = sdate.split()[0]
 
-                collection_name = 'Project_{}_{}_{}{}_{}'.format(poc, origin, nsamples, method, sdate)
+                #collection_name = 'Project_{}_{}_{}{}_{}'.format(poc, origin, nsamples, method, sdate)
+                collection_name = 'Project_{}_{}_{}{}_{}_{}'.format(poc, origin, nsamples, method, organism, sdate)
 
                 if pid:
                     # Attribute "project_id" is a required field in DTB vault
-                    collection_name = 'Project_{}_{}_{}_{}{}_{}'.format(poc, origin, pid, nsamples, method, sdate)
+                    #collection_name = 'Project_{}_{}_{}_{}{}_{}'.format(poc, origin, pid, nsamples, method, sdate)
+                    collection_name = 'Project_{}_{}_{}_{}'.format(poc, origin, pid, sdate)
                     temp['metadataEntries'].append({'attribute': 'project_id', 'value': pid})
 
                 if dme_vault == 'CCR_DTB_Archive':
@@ -512,7 +539,7 @@ def _analysis(parsed_data, template, opath, dme_vault):
             Missing the following required DME attributes: {}
             Please update the provided analysis metadata file before running again!""".format(",".join(missing)))
 
-    collection_name = 'Primary_Analysis_{}{}_{}_{}_{}'.format(parsed_data['number_of_cases'], parsed_data['method'], parsed_data['assembly_name'], parsed_data['gtf_ver'], parsed_data['md5_all_inputs_serial'])
+    collection_name = 'Primary_Analysis_{}{}_{}_{}_{}'.format(parsed_data['number_of_cases'], parsed_data['method'].replace(" ","-"), parsed_data['assembly_name'], parsed_data['gtf_ver'], parsed_data['md5_all_inputs_serial'])
 
     outfile = os.path.join(opath, '{}.metadata.json'.format(collection_name))
     path_exists(os.path.join(opath, '{}'.format(collection_name)))
@@ -573,7 +600,6 @@ def main():
     if analysisfile:
         analysis_dict = tsv2dict(analysisfile)
         analysis_collects = generate(parsed_data=analysis_dict, template=os.path.join(template_path, 'analysis_collection.json'), opath=dme_prefix, dme_vault=vault, helper=_analysis)
-
 
 
 if __name__ == '__main__':

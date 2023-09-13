@@ -58,8 +58,8 @@ pip install -r requirements.txt
 
 ``` bash
 usage: pyrkit -i INPUT_DIRECTORY -o OUTPUT_VAULT -r REQUEST_TEMPLATE
-              -m MULTIQC_DIRECTORY -d DME_REPO [-p PROJECT_ID] [-n] [-h]
-              [--version]
+              -m MULTIQC_DIRECTORY -d DME_REPO [-p PROJECT_ID] [-n]
+              [-l] [-v] [-h] [--version]
 ```
 
 #### 3.2 Required Arguments 
@@ -78,6 +78,8 @@ usage: pyrkit -i INPUT_DIRECTORY -o OUTPUT_VAULT -r REQUEST_TEMPLATE
 | ------------------------ | ------- | ------------------------------------- | ------------------- | 
 | -p, --project-id         | String  | Project ID                            | `ccbr-123`          | 
 | -n, --dry-run            | Flag    | Dry-run the entire pyrkit workflow    | `-n`                |
+| -n, --local-run          | Flag    | Upload to DME without job submission  | `-l`                |
+| -v, --validate           | Flag    | Validate entries before submission    | `-v`                |
 | -h, --help               | Flag    | Display help message and exit         | `-h`                |
 | --version                | Flag    | Display version information and exit  | `--version`         |
 
